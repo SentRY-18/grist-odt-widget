@@ -602,13 +602,15 @@
       img.setAttribute('data-odt-h', hcm.toFixed(3));
     });
 
-    // Convertir flex divs en tableaux 2 colonnes avant conversion ODT
+    // Convertir flex divs en tableaux 2 colonnes sans bordures
     tmp.querySelectorAll('div[style*="display: flex"], div[style*="display:flex"]').forEach(flexDiv => {
       const children = Array.from(flexDiv.children);
       if (children.length < 2) return;
       const justify = (flexDiv.style.justifyContent||'').toLowerCase();
+      const mb = flexDiv.style.marginBottom || '0';
       const table = document.createElement('table');
-      table.style.cssText = 'width:100%;border:none;border-collapse:collapse;margin-bottom:'+(flexDiv.style.marginBottom||'0');
+      table.setAttribute('data-layout','flex');
+      table.style.cssText = `width:100%;border:none;border-collapse:collapse;border-spacing:0;margin-bottom:${mb};`;
       const tr = document.createElement('tr');
       children.forEach((child, i) => {
         const td = document.createElement('td');
@@ -658,15 +660,21 @@
         const rows = Array.from(node.querySelectorAll('tr'));
         const maxC = rows.reduce((m,r)=>Math.max(m,r.querySelectorAll('td,th').length),0);
         if (!maxC) return '';
+        const isLayout = node.getAttribute('data-layout') === 'flex' ||
+                         (node.style && (node.style.border === 'none' || node.getAttribute('style')||'').includes('border:none'));
+        const tStyle   = isLayout ? 'TL' : 'T1';
         const cols = `<table:table-column table:number-columns-repeated="${maxC}"/>`;
         const trows = rows.map(row=>{
           const cells = Array.from(row.querySelectorAll('td,th')).map(cell=>{
-            const isH = cell.tagName.toLowerCase()==='th';
-            return `<table:table-cell table:style-name="${isH?'TC_H':'TC_D'}"><text:p text:style-name="${isH?'P_TH':'P_TD'}">${kids(cell)}</text:p></table:table-cell>`;
+            const isH  = cell.tagName.toLowerCase()==='th';
+            const cStyle = isLayout ? 'TC_L' : (isH ? 'TC_H' : 'TC_D');
+            const pStyle = isLayout ? 'P_D'  : (isH ? 'P_TH' : 'P_TD');
+            const align  = cell.style && cell.style.textAlign === 'right' ? 'P_R' : pStyle;
+            return `<table:table-cell table:style-name="${cStyle}"><text:p text:style-name="${align}">${kids(cell)}</text:p></table:table-cell>`;
           }).join('');
           return `<table:table-row>${cells}</table:table-row>`;
         }).join('');
-        return `<table:table table:style-name="T1">${cols}${trows}</table:table>`;
+        return `<table:table table:style-name="${tStyle}">${cols}${trows}</table:table>`;
       }
       if (['thead','tbody','tfoot','tr','td','th'].includes(tag)) return kids(node);
       return kids(node);
@@ -712,6 +720,8 @@
   <style:style style:name="T1" style:family="table"><style:table-properties fo:margin-top="0.3cm" fo:margin-bottom="0.3cm" style:width="17cm"/></style:style>
   <style:style style:name="TC_D" style:family="table-cell"><style:table-cell-properties fo:border="0.05pt solid #999" fo:padding="0.15cm"/></style:style>
   <style:style style:name="TC_H" style:family="table-cell"><style:table-cell-properties fo:border="0.05pt solid #999" fo:padding="0.15cm" fo:background-color="#f0f0f0"/></style:style>
+  <style:style style:name="TC_L" style:family="table-cell"><style:table-cell-properties fo:border="none" fo:padding="0cm"/></style:style>
+  <style:style style:name="TL"   style:family="table"><style:table-properties style:width="17cm" fo:margin-top="0.2cm" fo:margin-bottom="0.2cm"/></style:style>
 </office:automatic-styles>
 <office:body><office:text>${body}</office:text></office:body>
 </office:document-content>`;
