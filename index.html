@@ -602,15 +602,7 @@
       img.setAttribute('data-odt-h', hcm.toFixed(3));
     });
 
-    // Neutraliser position:relative et padding-bottom qui coupent le contenu dans LibreOffice
-    tmp.querySelectorAll('[style*="position"]').forEach(el => {
-      el.style.position = 'static';
-    });
-    tmp.querySelectorAll('[style*="padding-bottom"]').forEach(el => {
-      el.style.paddingBottom = '0';
-    });
-
-    // Convertir flex divs en tableaux 2 colonnes sans bordures
+// Convertir flex divs en tableaux 2 colonnes sans bordures
     tmp.querySelectorAll('div[style*="display: flex"], div[style*="display:flex"]').forEach(flexDiv => {
       const children = Array.from(flexDiv.children);
       if (children.length < 2) return;
@@ -635,19 +627,6 @@
 
     function kids(node) { return Array.from(node.childNodes).map(toOdt).join(''); }
 
-    // Comme kids() mais s'assure que le résultat est du XML ODT valide au niveau block
-    // (tout texte nu est enveloppé dans un text:p)
-    function kidsBlock(node) {
-      return Array.from(node.childNodes).map(child => {
-        const o = toOdt(child);
-        if (!o || !o.trim()) return '';
-        // Si ce n'est pas déjà un élément ODT block, wrapper dans text:p
-        if (!o.startsWith('<text:') && !o.startsWith('<table:') && !o.startsWith('<draw:')) {
-          return `<text:p text:style-name="P_D">${o}</text:p>`;
-        }
-        return o;
-      }).join('');
-    }
 
     function toOdt(node) {
       if (node.nodeType === 3) return esc(node.textContent);
@@ -669,10 +648,12 @@
         return `<text:p text:style-name="${s}">${kids(node)}</text:p>`;
       }
       if (tag === 'div') {
+        // Si le div contient des éléments block, traiter les enfants directement
         const hasBlock = Array.from(node.children).some(c =>
           ['p','table','h1','h2','h3','ul','ol','div'].includes(c.tagName.toLowerCase())
         );
-        if (hasBlock) return kidsBlock(node);
+        if (hasBlock) return kids(node);
+        // Sinon : inline → un paragraphe
         const a = (node.style&&node.style.textAlign)||'';
         const s = a==='center'?'P_C':a==='right'?'P_R':'P_D';
         const inner = kids(node).trim();
