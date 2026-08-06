@@ -648,16 +648,26 @@
         return `<text:p text:style-name="${s}">${kids(node)}</text:p>`;
       }
       if (tag === 'div') {
-        // Si le div contient des éléments block, traiter les enfants directement
         const hasBlock = Array.from(node.children).some(c =>
           ['p','table','h1','h2','h3','ul','ol','div'].includes(c.tagName.toLowerCase())
         );
-        if (hasBlock) return kids(node);
-        // Sinon : inline → un paragraphe
         const a = (node.style&&node.style.textAlign)||'';
         const s = a==='center'?'P_C':a==='right'?'P_R':'P_D';
+
+        // Convertir margin-top en paragraphes vides (1cm ≈ 1 ligne vide)
+        let spacer = '';
+        const mt = node.style && node.style.marginTop;
+        if (mt) {
+          const cm = parseFloat(mt);
+          if (!isNaN(cm) && cm > 0.5) {
+            const lines = Math.round(cm * 1.5);
+            spacer = '<text:p text:style-name="P_D"/>'.repeat(Math.min(lines, 20));
+          }
+        }
+
+        if (hasBlock) return spacer + kids(node);
         const inner = kids(node).trim();
-        return inner ? `<text:p text:style-name="${s}">${inner}</text:p>` : '';
+        return inner ? spacer + `<text:p text:style-name="${s}">${inner}</text:p>` : spacer;
       }
       if (tag==='h1') return `<text:h text:style-name="H1" text:outline-level="1">${kids(node)}</text:h>`;
       if (tag==='h2') return `<text:h text:style-name="H2" text:outline-level="2">${kids(node)}</text:h>`;
