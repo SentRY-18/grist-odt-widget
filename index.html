@@ -635,6 +635,20 @@
 
     function kids(node) { return Array.from(node.childNodes).map(toOdt).join(''); }
 
+    // Comme kids() mais s'assure que le résultat est du XML ODT valide au niveau block
+    // (tout texte nu est enveloppé dans un text:p)
+    function kidsBlock(node) {
+      return Array.from(node.childNodes).map(child => {
+        const o = toOdt(child);
+        if (!o || !o.trim()) return '';
+        // Si ce n'est pas déjà un élément ODT block, wrapper dans text:p
+        if (!o.startsWith('<text:') && !o.startsWith('<table:') && !o.startsWith('<draw:')) {
+          return `<text:p text:style-name="P_D">${o}</text:p>`;
+        }
+        return o;
+      }).join('');
+    }
+
     function toOdt(node) {
       if (node.nodeType === 3) return esc(node.textContent);
       if (node.nodeType !== 1) return '';
@@ -655,13 +669,10 @@
         return `<text:p text:style-name="${s}">${kids(node)}</text:p>`;
       }
       if (tag === 'div') {
-        // Si le div contient des éléments block (p, table, h1-h3, ul, ol),
-        // on les traite directement sans les envelopper dans un text:p
         const hasBlock = Array.from(node.children).some(c =>
           ['p','table','h1','h2','h3','ul','ol','div'].includes(c.tagName.toLowerCase())
         );
-        if (hasBlock) return kids(node);
-        // Sinon (div avec texte inline uniquement) → paragraphe
+        if (hasBlock) return kidsBlock(node);
         const a = (node.style&&node.style.textAlign)||'';
         const s = a==='center'?'P_C':a==='right'?'P_R':'P_D';
         const inner = kids(node).trim();
@@ -712,8 +723,9 @@
     let topNodes = unwrapSingleDiv(Array.from(tmp.childNodes).filter(n => n.nodeType === 1 || (n.nodeType === 3 && n.textContent.trim())));
     let body = topNodes.map(n=>{
       const o = toOdt(n);
+      if (!o || !o.trim()) return '';
       if (!o.startsWith('<text:')&&!o.startsWith('<table:')&&!o.startsWith('<draw:'))
-        return o.trim()?`<text:p text:style-name="P_D">${o}</text:p>`:'';
+        return `<text:p text:style-name="P_D">${o}</text:p>`;
       return o;
     }).join('');
     if (!body.trim()) body = '<text:p text:style-name="P_D"/>';
