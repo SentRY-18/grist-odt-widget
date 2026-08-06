@@ -602,6 +602,14 @@
       img.setAttribute('data-odt-h', hcm.toFixed(3));
     });
 
+    // Neutraliser position:relative et padding-bottom qui coupent le contenu dans LibreOffice
+    tmp.querySelectorAll('[style*="position"]').forEach(el => {
+      el.style.position = 'static';
+    });
+    tmp.querySelectorAll('[style*="padding-bottom"]').forEach(el => {
+      el.style.paddingBottom = '0';
+    });
+
     // Convertir flex divs en tableaux 2 colonnes sans bordures
     tmp.querySelectorAll('div[style*="display: flex"], div[style*="display:flex"]').forEach(flexDiv => {
       const children = Array.from(flexDiv.children);
