@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Export PDF / ODT</title>
+  <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    @font-face { font-family:'Marianne'; src:url('https://unpkg.com/@gouvfr/dsfr@1.10.2/dist/fonts/Marianne-Regular.woff2') format('woff2'); font-weight:400; font-style:normal; }
+    @font-face { font-family:'Marianne'; src:url('https://unpkg.com/@gouvfr/dsfr@1.10.2/dist/fonts/Marianne-Italic.woff2') format('woff2'); font-weight:400; font-style:italic; }
+    @font-face { font-family:'Marianne'; src:url('https://unpkg.com/@gouvfr/dsfr@1.10.2/dist/fonts/Marianne-Bold.woff2') format('woff2'); font-weight:700; font-style:normal; }
+    @font-face { font-family:'Marianne'; src:url('https://unpkg.com/@gouvfr/dsfr@1.10.2/dist/fonts/Marianne-BoldItalic.woff2') format('woff2'); font-weight:700; font-style:italic; }
+
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+    html,body{background:#f0f2f7!important;color:#1a1d27!important;font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;line-height:1.5;height:100%;}
+
+    .tabs{display:flex;border-bottom:2px solid #e2e5ed;background:#fff;padding:0 14px;}
+    .tab-btn{padding:10px 18px;border:none;background:none;font-size:12px;font-weight:600;color:#6b7280;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;}
+    .tab-btn.active{color:#4f5de8;border-bottom-color:#4f5de8;}
+    .tab-pane{display:none;padding:14px;}
+    .tab-pane.active{display:block;}
+
+    .card{background:#fff!important;border:1px solid #e2e5ed;border-radius:8px;padding:16px 18px;box-shadow:0 2px 10px rgba(0,0,0,.07);margin-bottom:12px;}
+    .hdr{padding-bottom:11px;border-bottom:1px solid #e2e5ed;margin-bottom:13px;}
+    .hdr-t{font-size:14px;font-weight:700;color:#1a1d27;}
+
+    #col-status{display:inline-block;width:12px;height:12px;border-radius:50%;background:#f59e0b;margin-bottom:12px;flex-shrink:0;}
+    #col-status.ready{background:#10b981;}
+    .dot{display:none;}
+
+    .sec{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#6b7280;margin-bottom:7px;}
+    .field{margin-bottom:10px;}
+    .field label{display:block;font-weight:600;font-size:12px;margin-bottom:4px;color:#1a1d27;}
+
+    input[type="number"],select{display:block;width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:6px;font-size:13px;font-family:inherit;background:#f9fafb;color:#111827;appearance:none;-webkit-appearance:none;}
+    select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:28px;}
+    input:focus,select:focus{outline:none;border-color:#4f5de8;box-shadow:0 0 0 3px rgba(79,93,232,.13);background:#fff;}
+
+    .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+    .hint{font-size:11px;color:#6b7280;margin-top:3px;}
+    hr{border:none;border-top:1px solid #e5e7eb;margin:12px 0;}
+    .callout{display:flex;gap:8px;padding:8px 10px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:6px;font-size:11.5px;color:#3730a3;line-height:1.5;}
+
+    .btn{padding:10px 16px;border:none;border-radius:7px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;transition:opacity .2s;}
+    .btn-primary{background:linear-gradient(135deg,#4f5de8,#6b78f0);color:#fff;box-shadow:0 4px 14px rgba(79,93,232,.28);}
+    .btn-primary:hover:not(:disabled){opacity:.9;}
+    .btn-primary:disabled{opacity:.5;cursor:not-allowed;box-shadow:none;}
+    .btn-secondary{background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;}
+    .btn-secondary:hover:not(:disabled){background:#e2e8f0;}
+    .btn-secondary:disabled{opacity:.5;cursor:not-allowed;}
+    .btn-danger{background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;}
+    .btn-danger:hover{background:#fecaca;}
+    .btn-full{width:100%;}
+    .btn-row{display:flex;gap:8px;margin-top:4px;}
+    .btn-row .btn{flex:1;}
+
+    /* Ligne courante (onglet unitaire) */
+    #u-row-info{font-size:13px;font-weight:600;color:#1a1d27;padding:8px 10px;background:#f8fafc;border:1px solid #e2e5ed;border-radius:6px;margin-bottom:12px;}
+
+    /* Liste de sélection (onglet lot) */
+    #row-list-wrap{max-height:220px;overflow-y:auto;border:1px solid #e2e5ed;border-radius:6px;margin-bottom:10px;}
+    .row-item{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:12px;}
+    .row-item:last-child{border-bottom:none;}
+    .row-item:hover{background:#f8fafc;}
+    .row-item.selected{background:#eef2ff;}
+    .row-item input[type=checkbox]{width:14px;height:14px;cursor:pointer;flex-shrink:0;accent-color:#4f5de8;}
+    .sel-actions{display:flex;gap:6px;margin-bottom:8px;}
+    .sel-actions button{padding:4px 10px;border:1px solid #d1d5db;border-radius:5px;background:#fff;font-size:11px;cursor:pointer;font-family:inherit;color:#374151;}
+    .sel-actions button:hover{background:#f1f5f9;}
+    #sel-count{font-size:11px;color:#6b7280;margin-left:auto;align-self:center;}
+
+    /* Progress */
+    #prog-area-l,#prog-area-u{display:none;margin-top:12px;}
+    #prog-area-l.on,#prog-area-u.on{display:block;}
+    .pbar-wrap{height:5px;background:#e5e7eb;border-radius:99px;overflow:hidden;margin-bottom:6px;}
+    .pbar-fill{height:100%;background:linear-gradient(90deg,#4f5de8,#7c86f7);border-radius:99px;transition:width .3s;width:0%;}
+    .pbar-info{display:flex;justify-content:space-between;font-size:11.5px;}
+    .pbar-lbl{font-weight:600;color:#1a1d27;}
+    .pbar-cnt{color:#6b7280;}
+
+    #result-l,#result-u{display:none;padding:9px 12px;border-radius:6px;font-size:12.5px;font-weight:600;margin-top:10px;text-align:center;}
+    .ok{display:block;background:#ecfdf5;color:#065f46;border:1px solid #6ee7b7;}
+    .err{display:block;background:#fef2f2;color:#991b1b;border:1px solid #fca5a5;}
+    .warn{display:block;background:#fffbeb;color:#b45309;border:1px solid #fde68a;}
+
+    /* Render zone */
+    #render-zone{position:fixed;top:0;left:-9999px;width:794px;background:white;pointer-events:none;z-index:-1;}
+    #render-zone .editor-preview{font-family:'Marianne',Arial,sans-serif;font-size:14px;line-height:1.4;color:black;background:white;padding:10mm 15mm;width:794px;}
+    #render-zone .editor-preview code{background-color:#dfe9ff;padding:0 4px;border-radius:4px;color:black;}
+    #render-zone .editor-preview blockquote{border-left:4px solid #ddd;margin:0;padding:0 1rem;color:#666;}
+    #render-zone .editor-preview pre{background-color:#eef3ff;padding:8px;border-radius:4px;}
+    #render-zone .editor-preview pre code{background-color:unset;padding:unset;border-radius:unset;}
+    #render-zone .editor-preview hr{margin-top:2rem;margin-bottom:2rem;border:none;border-top:1px solid #ddd;}
+    #render-zone .editor-preview table{margin:2rem 0;border-spacing:0;border:1px solid lightgrey;border-left:none;border-top:none;border-collapse:collapse;width:100%;}
+    #render-zone .editor-preview table th,#render-zone .editor-preview table td{border:1px solid lightgrey;padding:0.5rem 1rem;border-right:none;border-bottom:none;color:black;}
+    #render-zone .editor-preview table th:empty,#render-zone .editor-preview table td:empty{height:0;padding:0;border-top:none;}
+    #render-zone .editor-preview img{max-width:100%;height:auto;}
+    #render-zone .editor-preview p{margin:0.5em 0;}
+    #render-zone .editor-preview h1{font-size:2em;margin:0.67em 0;font-weight:bold;}
+    #render-zone .editor-preview h2{font-size:1.5em;margin:0.75em 0;font-weight:bold;}
+    #render-zone .editor-preview h3{font-size:1.17em;margin:0.83em 0;font-weight:bold;}
+    #render-zone .editor-preview ul,#render-zone .editor-preview ol{margin:0.5em 0 0.5em 2em;}
+    #render-zone .editor-preview li{margin:0.25em 0;}
+
+    /* Doc (onglet documentation) */
+    .doc-section{margin-bottom:18px;}
+    .doc-section h3{font-size:12px;font-weight:700;color:#1a1d27;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid #e5e7eb;}
+    .doc-section p,.doc-section li{font-size:12px;color:#374151;line-height:1.6;margin-bottom:4px;}
+    .doc-section ul{padding-left:16px;}
+    .doc-section code{background:#f1f5f9;padding:1px 5px;border-radius:4px;font-size:11px;color:#7c3aed;}
+    .badge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;margin-right:4px;}
+    .badge-blue{background:#dbeafe;color:#1d4ed8;}
+    .badge-green{background:#dcfce7;color:#166534;}
+    .badge-orange{background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;}
+  </style>
+</head>
+<body>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('unitaire')">Unitaire</button>
+  <button class="tab-btn" onclick="switchTab('lot')">En lot</button>
+  <button class="tab-btn" onclick="switchTab('doc')">Aide</button>
+</div>
+
+<!-- ═══ ONGLET UNITAIRE ═══ -->
+<div id="tab-unitaire" class="tab-pane active">
+  <div class="card">
+    <div class="hdr"><div class="hdr-t">Impression unitaire</div></div>
+
+    <div id="col-status" class="waiting" title="Colonne HTML non mappée"></div>
+
+    <div id="u-no-row" class="hint" style="margin-bottom:10px;">
+      Cliquez sur une ligne dans la table pour commencer.
+    </div>
+
+    <div id="u-config" style="display:none">
+      <div id="u-row-info"></div>
+
+      <div class="sec">Modèle à appliquer</div>
+      <div class="field">
+        <select id="uModelSelect"><option value="">— Choisir un modèle —</option></select>
+      </div>
+
+      <div class="btn-row">
+        <button id="uGenPdfBtn" class="btn btn-primary" disabled>Télécharger PDF</button>
+        <button id="uGenOdtBtn" class="btn btn-secondary" disabled>Télécharger ODT</button>
+      </div>
+    </div>
+
+    <div id="prog-area-u">
+      <div class="pbar-wrap"><div class="pbar-fill" id="pbar-u"></div></div>
+      <div class="pbar-info"><span class="pbar-lbl" id="prog-lbl-u">Initialisation…</span></div>
+    </div>
+    <div id="result-u"></div>
+  </div>
+</div>
+
+<!-- ═══ ONGLET LOT ═══ -->
+<div id="tab-lot" class="tab-pane">
+  <div class="card">
+    <div class="hdr"><div class="hdr-t">Impression en lot</div></div>
+
+    <div class="sec">Modèle à appliquer</div>
+    <div class="field">
+      <select id="modelSelect"><option value="">— Choisir un modèle —</option></select>
+    </div>
+    <div class="callout" style="margin-bottom:10px;">
+      Le modèle sera appliqué à chaque ligne sélectionnée. Les valeurs précédentes seront <strong>restaurées</strong> après génération.
+    </div>
+
+    <hr>
+
+    <div class="sec">Sélection des lignes</div>
+    <div class="sel-actions">
+      <button onclick="selectAll()">Tout sélectionner</button>
+      <button onclick="selectNone()">Tout désélectionner</button>
+      <span id="sel-count">0 ligne(s) sélectionnée(s)</span>
+    </div>
+    <div id="row-list-wrap">
+      <div id="row-list"></div>
+    </div>
+
+    <div class="btn-row">
+      <button id="genBtnPdf" class="btn btn-primary" disabled>ZIP de PDF</button>
+      <button id="genBtnOdt" class="btn btn-secondary" disabled>ZIP de ODT</button>
+    </div>
+    <div class="btn-row" style="margin-top:6px;">
+      <button id="cancelBtn" class="btn btn-danger btn-full" style="display:none">Annuler</button>
+    </div>
+
+    <div id="prog-area-l">
+      <div class="pbar-wrap"><div class="pbar-fill" id="pbar"></div></div>
+      <div class="pbar-info">
+        <span class="pbar-lbl" id="prog-lbl">Initialisation…</span>
+        <span class="pbar-cnt" id="prog-cnt">0 / 0</span>
+      </div>
+    </div>
+    <div id="result-l"></div>
+  </div>
+</div>
+
+<!-- ═══ ONGLET AIDE ═══ -->
+<div id="tab-doc" class="tab-pane">
+  <div class="card">
+    <div class="hdr"><div class="hdr-t">Documentation</div></div>
+
+    <div class="doc-section">
+      <h3>Présentation</h3>
+      <p>Ce widget Grist permet de générer des documents PDF ou ODT à partir d'un modèle HTML stocké dans la table <code>Modeles</code> et des données de la table courante.</p>
+    </div>
+
+    <div class="doc-section">
+      <h3>Configuration requise</h3>
+      <ul>
+        <li>La table doit avoir une colonne <strong>HTML</strong> (formule) mappée dans le panneau de configuration du widget.</li>
+        <li>Une table <code>Modeles</code> doit exister avec une colonne <code>Nom_du_modele</code>.</li>
+        <li>La table doit avoir une colonne <code>Modele</code> (référence vers la table Modeles).</li>
+        <li>La colonne <code>Nom_fichier</code> est utilisée pour nommer les fichiers générés.</li>
+      </ul>
+    </div>
+
+    <div class="doc-section">
+      <h3>Impression unitaire <span class="badge badge-blue">Onglet Unitaire</span></h3>
+      <ul>
+        <li>Cliquez sur une ligne dans la table Grist.</li>
+        <li>Choisissez un modèle dans la liste déroulante.</li>
+        <li>Cliquez sur <strong>Télécharger PDF</strong> ou <strong>Télécharger ODT</strong>.</li>
+        <li>Le modèle est appliqué temporairement, le document généré, puis la valeur précédente est restaurée.</li>
+      </ul>
+    </div>
+
+    <div class="doc-section">
+      <h3>Impression en lot <span class="badge badge-green">Onglet En lot</span></h3>
+      <ul>
+        <li>Choisissez un modèle.</li>
+        <li>Cochez les lignes à inclure dans le lot (Tout sélectionner / Tout désélectionner).</li>
+        <li>Cliquez sur <strong>ZIP de PDF</strong> ou <strong>ZIP de ODT</strong>.</li>
+        <li>Un fichier ZIP contenant tous les documents est téléchargé automatiquement.</li>
+      </ul>
+    </div>
+
+    <div class="doc-section">
+      <h3>Notes importantes <span class="badge badge-orange">Attention</span></h3>
+      <ul>
+        <li>Ne pas fermer ou recharger la page pendant la génération.</li>
+        <li>Pour des lots importants (100+ lignes), prévoir 2 à 3 minutes de traitement.</li>
+        <li>Le format ODT est compatible LibreOffice. Le logo et les images sont embarqués.</li>
+        <li>La police Marianne doit être installée sur le poste pour apparaître dans le ODT.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div id="render-zone"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  const $ = id => document.getElementById(id);
+  const rz = $('render-zone');
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  let mappedRecords = [];
+  let allTableRows  = [];
+  let htmlColKey    = null;
+  let tableId       = null;
+  let cancelled     = false;
+  let busy          = false;
+  let currentRecord = null;
+  let labelCol      = null; // colonne à afficher dans la liste
+
+  /* ── Tabs ── */
+  function switchTab(name) {
+    document.querySelectorAll('.tab-btn').forEach((b, i) => b.classList.toggle('active', ['unitaire','lot','doc'][i] === name));
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    $('tab-' + name).classList.add('active');
+  }
+  window.switchTab = switchTab;
+
+  /* ── Grist ── */
+  grist.ready({
+    requiredAccess: 'full',
+    columns: [{ name:'col_html', title:'Colonne HTML', optional:false, type:'Text' }]
+  });
+
+  grist.onRecord(async (record, mappings) => {
+    if (busy) return;
+    htmlColKey = mappings?.col_html || (record ? Object.keys(record).filter(k => k !== 'id')[0] : null);
+    currentRecord = record || null;
+    updateUnitaireUI();
+  });
+
+  grist.onRecords(async (records, mappings) => {
+    mappedRecords = records || [];
+    htmlColKey = mappings?.col_html || (records.length ? Object.keys(records[0]).filter(k => k !== 'id')[0] : null);
+    updateLotStatus();
+    if (!busy) await loadFullTable();
+  });
+
+  async function loadFullTable() {
+    try {
+      const tbl = await grist.getTable();
+      let id;
+      if (typeof tbl.getTableId === 'function') id = await tbl.getTableId();
+      else if (tbl._platform?.getTableId) id = await tbl._platform.getTableId();
+      else { allTableRows = mappedRecords; return; }
+      if (!tableId) tableId = id;
+
+      const raw  = await grist.docApi.fetchTable(id);
+      const cols = Object.keys(raw);
+      allTableRows = Array.from({ length: raw.id.length }, (_, i) => {
+        const r = {}; cols.forEach(c => { r[c] = raw[c][i]; }); return r;
+      });
+
+      // Détecter la meilleure colonne d'affichage
+      const prefer = ['Nom_Etablissement','Nom','nom','Libelle','libelle','Titre','titre'];
+      labelCol = prefer.find(c => cols.includes(c)) || cols.find(c => c !== 'id' && c !== 'Modele' && c !== htmlColKey) || 'id';
+
+      await loadModeles();
+      buildRowList();
+      updateUnitaireUI();
+    } catch (e) {
+      allTableRows = mappedRecords;
+    }
+  }
+
+  async function loadModeles() {
+    try {
+      const raw = await grist.docApi.fetchTable('Modeles');
+      const n   = raw.id.length;
+      const buildOptions = sel => {
+        sel.innerHTML = '<option value="">— Choisir un modèle —</option>';
+        for (let i = 0; i < n; i++) {
+          const nom = raw['Nom_du_modele']?.[i] || raw['Nom']?.[i] || `Modèle ${raw.id[i]}`;
+          const opt = document.createElement('option');
+          opt.value = raw.id[i]; opt.textContent = nom;
+          sel.appendChild(opt);
+        }
+      };
+      buildOptions($('modelSelect'));
+      buildOptions($('uModelSelect'));
+    } catch (e) {
+      ['modelSelect','uModelSelect'].forEach(id => {
+        $(id).innerHTML = '<option value="">— Table Modeles introuvable —</option>';
+      });
+    }
+  }
+
+  /* ── Liste de sélection (lot) ── */
+  function buildRowList() {
+    const list = $('row-list');
+    list.innerHTML = '';
+    mappedRecords.forEach(rec => {
+      const fullRow = allTableRows.find(r => r.id === rec.id) || rec;
+      const label   = labelCol ? String(fullRow[labelCol] ?? `Ligne ${rec.id}`) : `Ligne ${rec.id}`;
+      const item    = document.createElement('div');
+      item.className = 'row-item';
+      item.dataset.id = rec.id;
+      item.innerHTML = `<input type="checkbox" value="${rec.id}"><span>${label}</span>`;
+      item.querySelector('input').addEventListener('change', updateSelCount);
+      item.addEventListener('click', e => {
+        if (e.target.tagName !== 'INPUT') {
+          const cb = item.querySelector('input');
+          cb.checked = !cb.checked;
+          item.classList.toggle('selected', cb.checked);
+          updateSelCount();
+        } else {
+          item.classList.toggle('selected', e.target.checked);
+        }
+      });
+      list.appendChild(item);
+    });
+    updateSelCount();
+  }
+
+  function getSelectedIds() {
+    return Array.from($('row-list').querySelectorAll('input:checked')).map(cb => parseInt(cb.value));
+  }
+
+  function updateSelCount() {
+    const n = getSelectedIds().length;
+    $('sel-count').textContent = `${n} ligne(s) sélectionnée(s)`;
+  }
+
+  window.selectAll  = () => { $('row-list').querySelectorAll('input').forEach(cb => { cb.checked = true;  cb.closest('.row-item').classList.add('selected'); }); updateSelCount(); };
+  window.selectNone = () => { $('row-list').querySelectorAll('input').forEach(cb => { cb.checked = false; cb.closest('.row-item').classList.remove('selected'); }); updateSelCount(); };
+
+  /* ── Statuts ── */
+  function updateLotStatus() {
+    const ok = htmlColKey && mappedRecords.length > 0;
+    $('genBtnPdf').disabled = !ok;
+    $('genBtnOdt').disabled = !ok;
+  }
+
+  function updateUnitaireUI() {
+    const el = $('col-status');
+    if (htmlColKey) {
+      el.className = 'ready';
+      el.title = 'Colonne mappée';
+    } else {
+      el.className = 'waiting';
+      el.title = 'Colonne HTML non mappée';
+    }
+    if (currentRecord) {
+      $('u-no-row').style.display = 'none';
+      $('u-config').style.display = 'block';
+      const fullRow = allTableRows.find(r => r.id === currentRecord.id) || currentRecord;
+      const label   = labelCol ? String(fullRow[labelCol] ?? `id ${currentRecord.id}`) : `id ${currentRecord.id}`;
+      $('u-row-info').textContent = label;
+      $('uGenPdfBtn').disabled = !htmlColKey;
+      $('uGenOdtBtn').disabled = !htmlColKey;
+    } else {
+      $('u-no-row').style.display = 'block';
+      $('u-config').style.display = 'none';
+    }
+  }
+
+  /* ── Grist helpers ── */
+  async function setModeleForRows(rowIds, modeleId) {
+    await grist.docApi.applyUserActions(rowIds.map(id => ['UpdateRecord', tableId, id, { Modele: modeleId }]));
+  }
+
+  async function pollUntilReady(rowIds, modeleId) {
+    const maxWait = 120000, pollInterval = 800, startWait = Date.now();
+    while (Date.now() - startWait < maxWait) {
+      await sleep(pollInterval);
+      try {
+        const raw  = await grist.docApi.fetchTable(tableId);
+        const cols = Object.keys(raw);
+        const rows = Array.from({ length: raw.id.length }, (_, i) => {
+          const r = {}; cols.forEach(c => { r[c] = raw[c][i]; }); return r;
+        });
+        const ok = rowIds.every(id => {
+          const row = rows.find(r => r.id === id);
+          return row && row['Modele'] === modeleId && row[htmlColKey]?.trim();
+        });
+        if (ok) { allTableRows = rows; return rows; }
+      } catch(e) {}
+    }
+    throw new Error("Timeout : Grist n'a pas recalculé les formules en 2 minutes.");
+  }
+
+  function buildFileName(row) {
+    const v = row['Nom_fichier'] ?? row['Nom_Etablissement'] ?? `Document_${row.id}`;
+    return String(v).replace(/[<>:"/\\|?*]/g,'_').replace(/\s+/g,' ').trim().slice(0,200) || `Document_${row.id}`;
+  }
+
+  /* ── Images ── */
+  async function getAuthToken() {
+    try { const ti = await grist.docApi.getAccessToken({ readOnly: true }); return ti.token; } catch(e) { return null; }
+  }
+
+  async function resolveImages(container) {
+    const imgs = Array.from(container.querySelectorAll('img'));
+    if (!imgs.length) return;
+    const authToken = await getAuthToken();
+    await Promise.all(imgs.map(async img => {
+      const src = img.getAttribute('src') || '';
+      if (!src || src.startsWith('data:')) return;
+      try {
+        let url = src.startsWith('http') ? src : (location.origin + src);
+        if (authToken && url.includes('/attachments/')) {
+          url = url.replace(/[?&]auth=[^&]+/, '');
+          url += (url.includes('?') ? '&' : '?') + 'auth=' + authToken;
+        }
+        const r = await fetch(url, { credentials: 'omit' });
+        if (!r.ok) return;
+        const blob = await r.blob();
+        img.src = await new Promise((res, rej) => {
+          const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(blob);
+        });
+      } catch(e) {}
+    }));
+  }
+
+  function waitImages(el, ms = 4000) {
+    const imgs = Array.from(el.querySelectorAll('img'));
+    if (!imgs.length) return Promise.resolve();
+    return Promise.all(imgs.map(img => new Promise(res => {
+      if (img.complete && img.naturalWidth > 0) return res();
+      img.onload = img.onerror = res;
+      setTimeout(res, ms);
+    })));
+  }
+
+  /* ── Pagination PDF ── */
+  function paginateHtml(html, measureZone) {
+    const PAGE_H = 1123, PAD = 38, MAX_H = PAGE_H - PAD * 2;
+    const m = document.createElement('div');
+    m.style.cssText = 'position:absolute;visibility:hidden;top:0;left:0;width:100%;pointer-events:none;';
+    measureZone.appendChild(m);
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    let children = Array.from(tmp.childNodes).filter(n => n.nodeType === 1 || (n.nodeType === 3 && n.textContent.trim()));
+    if (children.length === 1 && children[0].nodeName === 'DIV') {
+      const inner = Array.from(children[0].childNodes).filter(n => n.nodeType === 1 || (n.nodeType === 3 && n.textContent.trim()));
+      if (inner.length > 1) children = inner;
+    }
+    const pages = []; let curHtml = '', curH = 0;
+    for (const child of children) {
+      const childHtml = child.outerHTML || child.textContent || '';
+      if (!childHtml.trim()) continue;
+      if (child.nodeType === 1) {
+        const style = child.getAttribute('style') || '';
+        if (style.includes('page-break-before') || child.classList?.contains('page-break-marker')) {
+          if (curHtml.trim()) { pages.push(curHtml); curHtml = ''; curH = 0; } continue;
+        }
+      }
+      m.innerHTML = childHtml;
+      const cH = m.offsetHeight;
+      if (curH + cH <= MAX_H) { curHtml += childHtml; curH += cH; continue; }
+      if (child.nodeName === 'TABLE') {
+        const chunks = splitTable(child, m, MAX_H, curH);
+        if (chunks.length > 0) {
+          curHtml += chunks[0]; pages.push(curHtml);
+          for (let t = 1; t < chunks.length - 1; t++) pages.push(chunks[t]);
+          if (chunks.length > 1) { curHtml = chunks[chunks.length - 1]; m.innerHTML = curHtml; curH = m.offsetHeight; }
+          else { curHtml = ''; curH = 0; }
+        }
+        continue;
+      }
+      if (curHtml.trim()) pages.push(curHtml);
+      curHtml = childHtml; curH = cH;
+    }
+    if (curHtml.trim()) pages.push(curHtml);
+    measureZone.removeChild(m);
+    return pages.length > 0 ? pages : [html];
+  }
+
+  function splitTable(table, measurer, maxH, startH) {
+    const thead = table.querySelector('thead');
+    const theadHtml = thead ? thead.outerHTML : '';
+    let theadH = 0;
+    if (thead) { measurer.innerHTML = '<table style="border-collapse:collapse;width:100%">' + theadHtml + '</table>'; theadH = measurer.offsetHeight; }
+    const bodyRows = Array.from(table.querySelectorAll('tr')).filter(r => !thead || !thead.contains(r));
+    const attrs = Array.from(table.attributes).map(a => a.name === 'style' ? 'style="border-collapse:collapse;width:100%;' + a.value + '"' : a.name + '="' + a.value + '"').join(' ');
+    const tOpen = '<table ' + (attrs || 'style="border-collapse:collapse;width:100%"') + '>';
+    const pages = []; let curRows = '', curH = startH + theadH;
+    for (const row of bodyRows) {
+      const rowHtml = row.outerHTML;
+      measurer.innerHTML = '<table style="border-collapse:collapse;width:100%"><tbody>' + rowHtml + '</tbody></table>';
+      const rH = measurer.offsetHeight;
+      if (curH + rH > maxH && curRows.length > 0) { pages.push(tOpen + theadHtml + '<tbody>' + curRows + '</tbody></table>'); curRows = ''; curH = theadH; }
+      curRows += rowHtml; curH += rH;
+    }
+    if (curRows.length > 0) pages.push(tOpen + theadHtml + '<tbody>' + curRows + '</tbody></table>');
+    return pages.length > 0 ? pages : [table.outerHTML];
+  }
+
+  /* ── HTML → PDF ── */
+  async function htmlToPdfBlob(html) {
+    const { jsPDF } = window.jspdf;
+    const MM_W = 210, MM_H = 297, PAGE_W = 794, PAGE_H = 1123;
+    rz.style.width = PAGE_W + 'px'; rz.style.height = 'auto'; rz.style.overflow = 'visible';
+    rz.innerHTML = `<div class="editor-preview">${html}</div>`;
+    const ep = rz.firstElementChild;
+    await resolveImages(ep);
+    await waitImages(ep, 4000);
+    await sleep(400);
+    const pages = paginateHtml(ep.innerHTML, ep);
+    rz.style.height = PAGE_H + 'px'; rz.style.overflow = 'hidden';
+    const pdf = new jsPDF({ unit:'mm', format:'a4', orientation:'portrait' });
+    for (let p = 0; p < pages.length; p++) {
+      if (p > 0) pdf.addPage();
+      ep.innerHTML = pages[p];
+      await sleep(80);
+      const canvas = await html2canvas(rz, { scale:2, useCORS:true, allowTaint:true, logging:false, scrollX:0, scrollY:0, windowWidth:PAGE_W, width:PAGE_W, height:PAGE_H, backgroundColor:'#ffffff' });
+      pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, MM_W, MM_H, '', 'FAST');
+      canvas.width = canvas.height = 1;
+    }
+    rz.style.height = 'auto'; rz.style.overflow = 'visible'; rz.innerHTML = '';
+    return pdf.output('blob');
+  }
+
+  /* ── HTML → ODT natif ── */
+  async function htmlToOdtBlob(html) {
+    // Résoudre les images dans un div temporaire visible pour avoir naturalWidth
+    const tmp = document.createElement('div');
+    tmp.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;visibility:hidden;';
+    tmp.innerHTML = html;
+    document.body.appendChild(tmp);
+    await resolveImages(tmp);
+    await waitImages(tmp, 4000);
+
+    const images = [];
+    tmp.querySelectorAll('img').forEach((img, idx) => {
+      const src = img.getAttribute('src') || '';
+      if (!src.startsWith('data:')) return;
+      const mime = src.split(';')[0].replace('data:','') || 'image/png';
+      const ext  = mime.split('/')[1] || 'png';
+      const name = `img${idx}.${ext}`;
+      let w = img.naturalWidth || 120, h = img.naturalHeight || 60;
+      const maxWcm = 5, wcm = Math.min(w * 0.026458, maxWcm);
+      const hcm = h * 0.026458 * (wcm / (w * 0.026458));
+      images.push({ name, src, mime, wcm: wcm.toFixed(3), hcm: hcm.toFixed(3) });
+      img.setAttribute('data-odt-name', name);
+      img.setAttribute('data-odt-w', wcm.toFixed(3));
+      img.setAttribute('data-odt-h', hcm.toFixed(3));
+    });
+
+    function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    function kids(node) { return Array.from(node.childNodes).map(toOdt).join(''); }
+
+    function toOdt(node) {
+      if (node.nodeType === 3) return esc(node.textContent);
+      if (node.nodeType !== 1) return '';
+      const tag = node.tagName.toLowerCase();
+      if (tag === 'img') {
+        const n = node.getAttribute('data-odt-name'), w = node.getAttribute('data-odt-w')||'4', h = node.getAttribute('data-odt-h')||'2';
+        if (!n) return '';
+        return `<draw:frame text:anchor-type="as-char" svg:width="${w}cm" svg:height="${h}cm"><draw:image xlink:href="Pictures/${esc(n)}" xlink:type="simple" xlink:show="embed" xlink:actuate="onLoad"/></draw:frame>`;
+      }
+      if (tag === 'br') return '<text:line-break/>';
+      if (tag === 'b'||tag==='strong') return `<text:span text:style-name="T_BOLD">${kids(node)}</text:span>`;
+      if (tag === 'i'||tag==='em')     return `<text:span text:style-name="T_ITALIC">${kids(node)}</text:span>`;
+      if (tag === 'u')                  return `<text:span text:style-name="T_UNDER">${kids(node)}</text:span>`;
+      if (tag === 'span')               return kids(node);
+      if (tag === 'p' || tag === 'div') {
+        const a = (node.style&&node.style.textAlign)||'';
+        const s = a==='center'?'P_C':a==='right'?'P_R':'P_D';
+        return `<text:p text:style-name="${s}">${kids(node)}</text:p>`;
+      }
+      if (tag==='h1') return `<text:h text:style-name="H1" text:outline-level="1">${kids(node)}</text:h>`;
+      if (tag==='h2') return `<text:h text:style-name="H2" text:outline-level="2">${kids(node)}</text:h>`;
+      if (tag==='h3') return `<text:h text:style-name="H3" text:outline-level="3">${kids(node)}</text:h>`;
+      if (tag==='hr') return '<text:p text:style-name="P_HR"/>';
+      if (tag==='ul'||tag==='ol') {
+        const s = tag==='ul'?'L_B':'L_N';
+        const items = Array.from(node.children).filter(c=>c.tagName.toLowerCase()==='li')
+          .map(li=>`<text:list-item><text:p text:style-name="P_LI">${kids(li)}</text:p></text:list-item>`).join('');
+        return `<text:list text:style-name="${s}">${items}</text:list>`;
+      }
+      if (tag==='table') {
+        const rows = Array.from(node.querySelectorAll('tr'));
+        const maxC = rows.reduce((m,r)=>Math.max(m,r.querySelectorAll('td,th').length),0);
+        if (!maxC) return '';
+        const cols = `<table:table-column table:number-columns-repeated="${maxC}"/>`;
+        const trows = rows.map(row=>{
+          const cells = Array.from(row.querySelectorAll('td,th')).map(cell=>{
+            const isH = cell.tagName.toLowerCase()==='th';
+            return `<table:table-cell table:style-name="${isH?'TC_H':'TC_D'}"><text:p text:style-name="${isH?'P_TH':'P_TD'}">${kids(cell)}</text:p></table:table-cell>`;
+          }).join('');
+          return `<table:table-row>${cells}</table:table-row>`;
+        }).join('');
+        return `<table:table table:style-name="T1">${cols}${trows}</table:table>`;
+      }
+      if (['thead','tbody','tfoot','tr','td','th'].includes(tag)) return kids(node);
+      return kids(node);
+    }
+
+    // Descendre dans le div conteneur unique si besoin
+    let topNodes = Array.from(tmp.childNodes);
+    if (topNodes.length===1 && topNodes[0].nodeType===1 && topNodes[0].nodeName==='DIV') {
+      const inner = Array.from(topNodes[0].childNodes);
+      if (inner.length > 1) topNodes = inner;
+    }
+    let body = topNodes.map(n=>{
+      const o = toOdt(n);
+      if (!o.startsWith('<text:')&&!o.startsWith('<table:')&&!o.startsWith('<draw:'))
+        return o.trim()?`<text:p text:style-name="P_D">${o}</text:p>`:'';
+      return o;
+    }).join('');
+    if (!body.trim()) body = '<text:p text:style-name="P_D"/>';
+
+    document.body.removeChild(tmp);
+
+    const F = 'Marianne';
+    const contentXml = `<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" office:version="1.2">
+<office:font-face-decls><style:font-face style:name="${F}" svg:font-family="${F}"/></office:font-face-decls>
+<office:automatic-styles>
+  <style:style style:name="P_D" style:family="paragraph"><style:paragraph-properties fo:margin-top="0.1cm" fo:margin-bottom="0.1cm"/><style:text-properties style:font-name="${F}" fo:font-size="10pt"/></style:style>
+  <style:style style:name="P_C" style:family="paragraph"><style:paragraph-properties fo:text-align="center" fo:margin-top="0.1cm" fo:margin-bottom="0.1cm"/><style:text-properties style:font-name="${F}" fo:font-size="10pt"/></style:style>
+  <style:style style:name="P_R" style:family="paragraph"><style:paragraph-properties fo:text-align="end" fo:margin-top="0.1cm" fo:margin-bottom="0.1cm"/><style:text-properties style:font-name="${F}" fo:font-size="10pt"/></style:style>
+  <style:style style:name="P_LI" style:family="paragraph"><style:text-properties style:font-name="${F}" fo:font-size="10pt"/></style:style>
+  <style:style style:name="P_TD" style:family="paragraph"><style:text-properties style:font-name="${F}" fo:font-size="10pt"/></style:style>
+  <style:style style:name="P_TH" style:family="paragraph"><style:paragraph-properties fo:text-align="center"/><style:text-properties style:font-name="${F}" fo:font-size="10pt" fo:font-weight="bold"/></style:style>
+  <style:style style:name="P_HR" style:family="paragraph"><style:paragraph-properties fo:border-bottom="0.05pt solid #888" fo:padding-bottom="0.1cm" fo:margin-top="0.3cm" fo:margin-bottom="0.3cm"/></style:style>
+  <style:style style:name="H1" style:family="paragraph"><style:text-properties style:font-name="${F}" fo:font-size="18pt" fo:font-weight="bold"/></style:style>
+  <style:style style:name="H2" style:family="paragraph"><style:text-properties style:font-name="${F}" fo:font-size="15pt" fo:font-weight="bold"/></style:style>
+  <style:style style:name="H3" style:family="paragraph"><style:text-properties style:font-name="${F}" fo:font-size="13pt" fo:font-weight="bold"/></style:style>
+  <style:style style:name="T_BOLD" style:family="text"><style:text-properties fo:font-weight="bold"/></style:style>
+  <style:style style:name="T_ITALIC" style:family="text"><style:text-properties fo:font-style="italic"/></style:style>
+  <style:style style:name="T_UNDER" style:family="text"><style:text-properties style:text-underline-style="solid" style:text-underline-width="auto" style:text-underline-color="font-color"/></style:style>
+  <style:style style:name="T1" style:family="table"><style:table-properties fo:margin-top="0.3cm" fo:margin-bottom="0.3cm" style:width="17cm"/></style:style>
+  <style:style style:name="TC_D" style:family="table-cell"><style:table-cell-properties fo:border="0.05pt solid #999" fo:padding="0.15cm"/></style:style>
+  <style:style style:name="TC_H" style:family="table-cell"><style:table-cell-properties fo:border="0.05pt solid #999" fo:padding="0.15cm" fo:background-color="#f0f0f0"/></style:style>
+</office:automatic-styles>
+<office:body><office:text>${body}</office:text></office:body>
+</office:document-content>`;
+
+    const stylesXml = `<?xml version="1.0" encoding="UTF-8"?>
+<office:document-styles xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0" office:version="1.2">
+<office:automatic-styles>
+  <style:page-layout style:name="pm1">
+    <style:page-layout-properties fo:page-width="21cm" fo:page-height="29.7cm" fo:margin-top="2cm" fo:margin-bottom="2cm" fo:margin-left="2cm" fo:margin-right="2cm"/>
+  </style:page-layout>
+</office:automatic-styles>
+<office:master-styles><style:master-page style:name="Standard" style:page-layout-name="pm1"/></office:master-styles>
+</office:document-styles>`;
+
+    const manifestXml = `<?xml version="1.0" encoding="UTF-8"?>
+<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.2">
+  <manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.text"/>
+  <manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>
+  <manifest:file-entry manifest:full-path="styles.xml" manifest:media-type="text/xml"/>
+${images.map(i=>`  <manifest:file-entry manifest:full-path="Pictures/${i.name}" manifest:media-type="${i.mime}"/>`).join('\n')}
+</manifest:manifest>`;
+
+    const zip = new JSZip();
+    zip.file('mimetype','application/vnd.oasis.opendocument.text',{compression:'STORE'});
+    zip.file('content.xml', contentXml);
+    zip.file('styles.xml', stylesXml);
+    zip.file('META-INF/manifest.xml', manifestXml);
+    images.forEach(i => zip.file(`Pictures/${i.name}`, i.src.split(',')[1]||'', {base64:true}));
+    return zip.generateAsync({type:'blob', mimeType:'application/vnd.oasis.opendocument.text'});
+  }
+
+  /* ── Progress & Result ── */
+  function setProgress(cur,tot,lbl){ $('pbar').style.width=tot>0?Math.round(cur/tot*100)+'%':'0%'; $('prog-lbl').textContent=lbl; $('prog-cnt').textContent=`${cur} / ${tot}`; }
+  function showResult(cls,msg){ const el=$('result-l'); el.className=cls; el.textContent=msg; }
+  function setProgressU(lbl){ $('prog-lbl-u').textContent=lbl; }
+  function showResultU(cls,msg){ const el=$('result-u'); el.className=cls; el.textContent=msg; }
+
+  /* ── Unitaire ── */
+  let uOldModele=null, uRowId=null;
+
+  async function downloadUnit(format) {
+    const modeleId = parseInt($('uModelSelect').value);
+    if (!modeleId) return showResultU('warn','Veuillez choisir un modèle.');
+    if (!currentRecord) return showResultU('warn','Aucune ligne sélectionnée.');
+
+    busy=true;
+    $('uGenPdfBtn').disabled=true; $('uGenOdtBtn').disabled=true;
+    $('result-u').className=''; $('result-u').textContent='';
+    $('prog-area-u').className='on';
+    setProgressU('Application du modèle…');
+
+    uRowId = currentRecord.id;
+    uOldModele = (allTableRows.find(r=>r.id===uRowId)||{})['Modele']??null;
+    try {
+      await setModeleForRows([uRowId], modeleId);
+      setProgressU('Attente du recalcul Grist…');
+      const fresh = await pollUntilReady([uRowId], modeleId);
+      const html  = (fresh.find(r=>r.id===uRowId)||{})[htmlColKey]||'';
+      if (!html.trim()) throw new Error('HTML vide pour cette ligne.');
+
+      setProgressU('Génération du document…');
+      const blob = format==='pdf' ? await htmlToPdfBlob(html) : await htmlToOdtBlob(html);
+      const fullRow = allTableRows.find(r=>r.id===uRowId)||{};
+      const name  = buildFileName(fullRow);
+      saveAs(blob, name + (format==='pdf'?'.pdf':'.odt'));
+      showResultU('ok', format==='pdf'?'PDF téléchargé.':'ODT téléchargé.');
+
+      // Restaurer
+      await grist.docApi.applyUserActions([['UpdateRecord',tableId,uRowId,{Modele:uOldModele??0}]]);
+    } catch(err) {
+      showResultU('err','Erreur : '+err.message);
+      try { await grist.docApi.applyUserActions([['UpdateRecord',tableId,uRowId,{Modele:uOldModele??0}]]); } catch(_){}
+    }
+    $('prog-area-u').className='';
+    $('uGenPdfBtn').disabled=false; $('uGenOdtBtn').disabled=false;
+    busy=false;
+  }
+
+  $('uGenPdfBtn').addEventListener('click', () => downloadUnit('pdf'));
+  $('uGenOdtBtn').addEventListener('click', () => downloadUnit('odt'));
+
+  /* ── Lot ── */
+  $('cancelBtn').addEventListener('click', () => { if(!busy)return; cancelled=true; $('prog-lbl').textContent='Annulation…'; });
+
+  async function runBatch(format) {
+    if (busy) return;
+    $('result-l').className=''; $('result-l').textContent='';
+    const modeleId = parseInt($('modelSelect').value);
+    if (!modeleId) return showResult('warn','Veuillez choisir un modèle.');
+    const selectedIds = getSelectedIds();
+    if (!selectedIds.length) return showResult('warn','Sélectionnez au moins une ligne.');
+    if (!htmlColKey) return showResult('err','Aucune colonne HTML mappée.');
+
+    const slice = mappedRecords.filter(r => selectedIds.includes(r.id));
+    busy=true; cancelled=false;
+    $('genBtnPdf').disabled=true; $('genBtnOdt').disabled=true;
+    $('cancelBtn').style.display='flex';
+    $('prog-area-l').className='on';
+
+    const ext = format==='pdf'?'.pdf':'.odt';
+    const rowIds     = slice.map(r=>r.id);
+    const oldModeles = rowIds.map(id=>(allTableRows.find(r=>r.id===id)||{})['Modele']??null);
+
+    try {
+      setProgress(0,slice.length,'Application du modèle…');
+      await setModeleForRows(rowIds, modeleId);
+      setProgress(0,slice.length,'Attente du recalcul Grist…');
+      const freshRows = await pollUntilReady(rowIds, modeleId);
+
+      const zip=new JSZip(); const used=new Set(); let ok=0, skip=0;
+      for (let i=0; i<slice.length; i++) {
+        if (cancelled) { showResult('warn',`Annulé après ${ok} fichiers.`); break; }
+        const mapped = slice[i];
+        const html   = (freshRows.find(r=>r.id===mapped.id)||mapped)[htmlColKey];
+        if (!html?.trim()) { skip++; setProgress(i+1,slice.length,`Ligne ignorée`); continue; }
+        const fullRow = allTableRows.find(r=>r.id===mapped.id)||mapped;
+        let name = buildFileName(fullRow);
+        let file = name+ext;
+        if (used.has(file)) file=`${name}_${mapped.id}${ext}`;
+        used.add(file);
+        setProgress(i,slice.length,`Création : ${file}`);
+        try {
+          const blob = format==='pdf' ? await htmlToPdfBlob(html) : await htmlToOdtBlob(html);
+          if (blob&&blob.size>200) { zip.file(file,blob); ok++; } else skip++;
+        } catch(e) { skip++; }
+        setProgress(i+1,slice.length,`${ok} fichiers créés…`);
+      }
+
+      setProgress(slice.length,slice.length,'Restauration des données…');
+      await grist.docApi.applyUserActions(rowIds.map((id,i)=>['UpdateRecord',tableId,id,{Modele:oldModeles[i]??0}]));
+
+      if (ok>0) {
+        const zb = await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:5}});
+        const d=new Date(), ds=`${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+        saveAs(zb,`Export_${format==='pdf'?'PDF':'ODT'}_${ds}.zip`);
+        setProgress(slice.length,slice.length,'ZIP téléchargé');
+        showResult('ok',`${ok} fichiers générés${skip?` (${skip} ignorée(s))`:''}`);
+      } else if (!cancelled) {
+        showResult('err','Aucun fichier valide généré.');
+      }
+    } catch(err) {
+      showResult('err',`Erreur : ${err.message}`);
+      try { await grist.docApi.applyUserActions(rowIds.map((id,i)=>['UpdateRecord',tableId,id,{Modele:oldModeles[i]??0}])); } catch(_){}
+    }
+
+    rz.innerHTML='';
+    busy=false; cancelled=false;
+    $('genBtnPdf').disabled=false; $('genBtnOdt').disabled=false;
+    $('cancelBtn').style.display='none';
+  }
+
+  $('genBtnPdf').addEventListener('click', () => runBatch('pdf'));
+  $('genBtnOdt').addEventListener('click', () => runBatch('odt'));
+
+})();
+</script>
+</body>
+</html>
