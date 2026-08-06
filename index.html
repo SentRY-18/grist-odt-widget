@@ -641,10 +641,23 @@
       if (tag === 'i'||tag==='em')     return `<text:span text:style-name="T_ITALIC">${kids(node)}</text:span>`;
       if (tag === 'u')                  return `<text:span text:style-name="T_UNDER">${kids(node)}</text:span>`;
       if (tag === 'span')               return kids(node);
-      if (tag === 'p' || tag === 'div') {
+      if (tag === 'p') {
         const a = (node.style&&node.style.textAlign)||'';
         const s = a==='center'?'P_C':a==='right'?'P_R':'P_D';
         return `<text:p text:style-name="${s}">${kids(node)}</text:p>`;
+      }
+      if (tag === 'div') {
+        // Si le div contient des éléments block (p, table, h1-h3, ul, ol),
+        // on les traite directement sans les envelopper dans un text:p
+        const hasBlock = Array.from(node.children).some(c =>
+          ['p','table','h1','h2','h3','ul','ol','div'].includes(c.tagName.toLowerCase())
+        );
+        if (hasBlock) return kids(node);
+        // Sinon (div avec texte inline uniquement) → paragraphe
+        const a = (node.style&&node.style.textAlign)||'';
+        const s = a==='center'?'P_C':a==='right'?'P_R':'P_D';
+        const inner = kids(node).trim();
+        return inner ? `<text:p text:style-name="${s}">${inner}</text:p>` : '';
       }
       if (tag==='h1') return `<text:h text:style-name="H1" text:outline-level="1">${kids(node)}</text:h>`;
       if (tag==='h2') return `<text:h text:style-name="H2" text:outline-level="2">${kids(node)}</text:h>`;
