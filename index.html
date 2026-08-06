@@ -168,7 +168,7 @@
       <select id="modelSelect"><option value="">— Choisir un modèle —</option></select>
     </div>
     <div class="callout" style="margin-bottom:10px;">
-      Le modèle sera appliqué à chaque ligne sélectionnée. Les valeurs précédentes seront <strong>restaurées</strong> après génération.
+      Le modèle sera appliqué à chaque ligne sélectionnée. Les valeurs précédentes seront restaurées après génération.
     </div>
 
     <hr>
@@ -602,6 +602,25 @@
       img.setAttribute('data-odt-h', hcm.toFixed(3));
     });
 
+    // Convertir flex divs en tableaux 2 colonnes avant conversion ODT
+    tmp.querySelectorAll('div[style*="display: flex"], div[style*="display:flex"]').forEach(flexDiv => {
+      const children = Array.from(flexDiv.children);
+      if (children.length < 2) return;
+      const justify = (flexDiv.style.justifyContent||'').toLowerCase();
+      const table = document.createElement('table');
+      table.style.cssText = 'width:100%;border:none;border-collapse:collapse;margin-bottom:'+(flexDiv.style.marginBottom||'0');
+      const tr = document.createElement('tr');
+      children.forEach((child, i) => {
+        const td = document.createElement('td');
+        td.style.cssText = 'border:none;padding:0;vertical-align:top;';
+        if (justify.includes('space-between') && i === children.length-1) td.style.textAlign = 'right';
+        td.innerHTML = child.innerHTML;
+        tr.appendChild(td);
+      });
+      table.appendChild(tr);
+      flexDiv.replaceWith(table);
+    });
+
     function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
     function kids(node) { return Array.from(node.childNodes).map(toOdt).join(''); }
@@ -653,12 +672,15 @@
       return kids(node);
     }
 
-    // Descendre dans le div conteneur unique si besoin
-    let topNodes = Array.from(tmp.childNodes);
-    if (topNodes.length===1 && topNodes[0].nodeType===1 && topNodes[0].nodeName==='DIV') {
-      const inner = Array.from(topNodes[0].childNodes);
-      if (inner.length > 1) topNodes = inner;
+    // Descendre dans les divs conteneurs uniques (potentiellement imbriqués)
+    function unwrapSingleDiv(nodes) {
+      if (nodes.length === 1 && nodes[0].nodeType === 1 && nodes[0].nodeName === 'DIV') {
+        const inner = Array.from(nodes[0].childNodes).filter(n => n.nodeType === 1 || (n.nodeType === 3 && n.textContent.trim()));
+        if (inner.length > 0) return unwrapSingleDiv(inner);
+      }
+      return nodes;
     }
+    let topNodes = unwrapSingleDiv(Array.from(tmp.childNodes).filter(n => n.nodeType === 1 || (n.nodeType === 3 && n.textContent.trim())));
     let body = topNodes.map(n=>{
       const o = toOdt(n);
       if (!o.startsWith('<text:')&&!o.startsWith('<table:')&&!o.startsWith('<draw:'))
